@@ -1,0 +1,97 @@
+#!/bin/bash
+
+CONFIG_FILE='../.repoconfig'
+
+# Check if the config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "The config file $CONFIG_FILE does not exist. Do you want to create a default one? (yes/y or no)"
+  read answer # Prompt the user for input
+  
+  # Convert the answer to lowercase to make the check case-insensitive
+  answer=$(echo "$answer" | tr '[:upper:]' '[:lower:]')
+
+  # Check if the user's answer is 'yes' or 'y'
+  if [ "$answer" = "yes" ] || [ "$answer" = "y" ]; then
+    # User agreed to create the config file
+    echo "Creating a default config file at $CONFIG_FILE..."
+    # Define default content for the config file
+    cat << EOF > $CONFIG_FILE
+{
+  "files": [
+    // { "source": "../common/.env", "destination": "./.env" }
+  ],
+  "scripts": [
+    // Replace this line with actual initialization or setup commands
+  ]
+}
+EOF
+    echo "Default config file created. Please review and update it according to your project's needs."
+    # Optionally, exit the script to let the user update the config as needed
+    exit 1
+  else
+    echo "Config file creation canceled. Please create the config file manually if needed."
+    exit 1
+  fi
+fi
+
+COLOR_OFF='\033[0m'       # Text Reset
+COLOR_GREEN='\033[0;32m'  # Green
+
+copy_files_from_config() {
+  FILES_LENGTH=$(jq '.files | length' $CONFIG_FILE)
+  echo "Files to copy: $FILES_LENGTH"
+
+  for ((i=0; i<$FILES_LENGTH; i++)); do
+    SOURCE=$(jq -r ".files[$i].source" $CONFIG_FILE)
+    DEST=$(jq -r ".files[$i].destination" $CONFIG_FILE)
+
+    # Check if the source file exists
+    if [ ! -f "$SOURCE" ]; then
+      echo "Source file $SOURCE does not exist. Skipping..."
+      continue
+    fi
+
+    # Extract the directory part of the destination path
+    DEST_DIR=$(dirname "$DEST")
+
+    # Ensure the destination directory exists
+    echo "Ensuring destination directory $DEST_DIR exists"
+    mkdir -p "$DEST_DIR"
+
+    # Now copy the file
+    echo -e "${COLOR_GREEN}Copying $SOURCE to $DEST${COLOR_OFF}"
+    cp "$SOURCE" "$DEST"
+  done
+}
+
+run_scripts_from_config() {
+  SCRIPTS=$(jq -r '.scripts[]' "$CONFIG_FILE")
+  for script in $SCRIPTS; do
+    echo -e "${COLOR_GREEN}Running $script${COLOR_OFF}"
+    $script
+  done
+}
+
+if [[ $# -eq 0 ]]; then 
+  echo "Reading config file"
+  copy_files_from_config
+  run_scripts_from_config
+else
+  while :; do
+    case $1 in
+      -f)
+        copy_files_from_config
+        break
+        ;;
+      -s)
+        run_scripts_from_config
+        break
+        ;;
+      *)
+        echo "Invalid argument"
+        break
+    esac
+    shift
+  done
+fi
+
